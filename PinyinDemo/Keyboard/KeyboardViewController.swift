@@ -23,6 +23,7 @@ final class KeyboardViewController: UIInputViewController {
     private let micButton = UIButton(type: .system)
     /// 延迟创建:键盘扩展启动阶段不初始化任何语音框架(闪退加固)
     private lazy var voice = VoiceInputController()
+    private var voiceBound = false
 
     // MARK: - 生命周期
 
@@ -30,10 +31,11 @@ final class KeyboardViewController: UIInputViewController {
         super.viewDidLoad()
         inputView?.allowsSelfSizing = true
         view.heightAnchor.constraint(equalToConstant: 264).isActive = true
-        bindVoiceCallbacks()
         setupUI()
         buildKeyboard()
         refreshCandidates()
+        // 后台预热词库:避免首次按键时同步解析 JSON 的卡顿(静态 let 并发安全)
+        DispatchQueue.global(qos: .utility).async { _ = Lexicon.table }
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -91,7 +93,7 @@ final class KeyboardViewController: UIInputViewController {
         let globeButton = key("🌐") { [weak self] in
             guard let self else { return }
             self.composing = ""
-            self.voice.cancel()
+            self.stopVoiceIfNeeded()
             self.advanceToNextInputMode()
         }
         configureAsKey(modeButton, fontSize: 16)
@@ -154,7 +156,7 @@ final class KeyboardViewController: UIInputViewController {
     // MARK: - 按键处理
 
     private func tapChar(_ payload: String) {
-        if voice.isListening { voice.cancel() }
+        stopVoiceIfNeeded()
         switch mode {
         case .numbers:
             textDocumentProxy.insertText(payload)
@@ -165,6 +167,7 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func tapSpace() {
+        stopVoiceIfNeeded()
         if !composing.isEmpty {
             commit(candidates.first ?? composing)
         } else {
@@ -173,6 +176,7 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func tapReturn() {
+        stopVoiceIfNeeded()
         if !composing.isEmpty {
             commit(composing)                 // 组合中原样上屏
         } else {
@@ -181,7 +185,7 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func tapDelete() {
-        if voice.isListening { voice.cancel() }
+        stopVoiceIfNeeded()
         if composing.isEmpty {
             textDocumentProxy.deleteBackward()
         } else {
@@ -191,6 +195,7 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func cycleMode() {
+        stopVoiceIfNeeded()
         composing = ""
         switch mode {
         case .qwerty: mode = .t9
@@ -199,6 +204,11 @@ final class KeyboardViewController: UIInputViewController {
         }
         buildKeyboard()
         refreshCandidates()
+    }
+
+    /// 录音中按下任何输入类按键:先结束听写,避免语音状态与键盘状态错乱
+    private func stopVoiceIfNeeded() {
+        if voice.isListening { voice.cancel() }
     }
 
     private func commit(_ text: String) {
@@ -241,7 +251,10 @@ final class KeyboardViewController: UIInputViewController {
 
     // MARK: - 语音输入(SFSpeechRecognizer 设备端识别,详见调研报告 §6.2)
 
-    private func bindVoiceCallbacks() {
+    /// 首次点击 🎤 时才绑定回调与创建语音控制器(键盘启动阶段零语音痕迹)
+    private func bindVoiceIfNeeded() {
+        guard !voiceBound else { return }
+        voiceBound = true
         voice.onListeningChange = { [weak self] listening in
             self?.micButton.backgroundColor = listening ? .systemRed : .systemBackground
         }
@@ -251,6 +264,7 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func toggleVoice() {
+        bindVoiceIfNeeded()
         if voice.isListening {
             voice.finish()
             return

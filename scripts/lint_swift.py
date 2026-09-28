@@ -25,7 +25,7 @@ kv = open(os.path.join(ROOT, "PinyinDemo/Keyboard/KeyboardViewController.swift")
 vi = open(os.path.join(ROOT, "PinyinDemo/Keyboard/VoiceInputController.swift"), encoding="utf-8").read()
 pe = open(os.path.join(ROOT, "PinyinDemo/Keyboard/PinyinEngine.swift"), encoding="utf-8").read()
 
-missing = [n for n in ["toggleVoice", "bindVoiceCallbacks", "showVoicePartial", "passiveLabel",
+missing = [n for n in ["toggleVoice", "bindVoiceIfNeeded", "stopVoiceIfNeeded", "showVoicePartial", "passiveLabel",
                        "showAlert", "configureAsKey", "tapSpace", "tapReturn", "tapDelete",
                        "cycleMode", "commit", "refreshCandidates", "buildKeyboard", "setupUI"]
            if n not in kv]

@@ -17,9 +17,19 @@ final class VoiceInputController: NSObject {
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private lazy var recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN"))
+    private var tapInstalled = false
 
     private(set) var listening = false
     var isListening: Bool { listening }
+
+    /// 识别回调可能来自后台线程:UI 更新与 textDocumentProxy 操作必须回到主线程
+    private func emit(_ fire: @escaping () -> Void) {
+        if Thread.isMainThread {
+            fire()
+        } else {
+            DispatchQueue.main.async(execute: fire)
+        }
+    }
 
     deinit {
         // 只有真正开启过会话才需要清理(避免强制创建 lazy 资源)
@@ -57,10 +67,10 @@ final class VoiceInputController: NSObject {
         setListening(false)
     }
 
-    /// 放弃当前听写
+    /// 放弃当前听写(主线程调用)
     func cancel() {
         task?.cancel()
-        if request != nil || task != nil { teardownAudio() }
+        if request != nil || task != nil || tapInstalled { teardownAudio() }
         request = nil
         task = nil
         setListening(false)
@@ -103,24 +113,32 @@ final class VoiceInputController: NSObject {
             inputNode.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak request] buffer, _ in
                 request?.append(buffer)
             }
+            tapInstalled = true
             audioEngine.prepare()
             try audioEngine.start()
 
+            // 识别结果回调在后台线程:一律 emit 回主线程后再碰 UI / textDocumentProxy
             task = recognizer?.recognitionTask(with: request) { [weak self] result, error in
                 guard let self else { return }
                 if let result {
                     let text = result.bestTranscription.formattedString
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                     if result.isFinal {
-                        if !text.isEmpty { self.onFinal?(text) }
-                        self.cancel()
+                        self.emit { [weak self] in
+                            guard let self else { return }
+                            if !text.isEmpty { self.onFinal?(text) }
+                            self.cancel()             // 主线程收尾清理
+                        }
                     } else {
-                        self.onPartial?(text)
+                        self.emit { [weak self] in self?.onPartial?(text) }
                     }
                 }
                 if error != nil {
-                    self.onError?("识别中断,请重试")
-                    self.cancel()
+                    self.emit { [weak self] in
+                        guard let self else { return }
+                        self.onError?("识别中断,请重试")
+                        self.cancel()
+                    }
                 }
             }
             setListening(true)
@@ -135,10 +153,13 @@ final class VoiceInputController: NSObject {
         onListeningChange?(value)
     }
 
-    /// 停止采集音频(识别任务继续,直到 isFinal 回调)
+    /// 停止采集音频(识别任务继续,直到 isFinal 回调);可安全重复调用
     private func teardownAudio() {
+        if tapInstalled {
+            audioEngine.inputNode.removeTap(onBus: 0)
+            tapInstalled = false
+        }
         audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }

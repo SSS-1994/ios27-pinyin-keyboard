@@ -13,7 +13,7 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"     # 仅 iPhone
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "1.1.0"      # 版本号(发布时改这里)
-    CURRENT_PROJECT_VERSION: "2"    # 构建号
+    CURRENT_PROJECT_VERSION: "3"    # 构建号
 
 targets:
   PinyinDemo:
