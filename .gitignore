@@ -1,0 +1,5 @@
+.tmp/
+build/
+build-*/
+*.xcodeproj
+.DS_Store

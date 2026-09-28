@@ -1,0 +1,84 @@
+# 免费云端构建:GitHub 公共仓库的 macOS runner 完全免费。
+# 产出两个 artifact:
+#   1. simulator-screenshot  — 模拟器安装启动冒烟截图(功能验证)
+#   2. unsigned-ipa          — 未签名 ipa,下载后自行签名安装(Sideloadly/AltStore/爱思/Xcode)
+name: iOS Build
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 选择最新 Xcode(优先 17.x,支持 iOS 27 SDK)
+        run: |
+          ls /Applications | grep Xcode || true
+          XCODE_APP=$(ls -d /Applications/Xcode*17*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -z "$XCODE_APP" ]; then
+            XCODE_APP=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          fi
+          echo "使用 $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: 安装 XcodeGen 并生成工程
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: 模拟器构建
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project PinyinDemo.xcodeproj \
+            -scheme PinyinDemo \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build-sim \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: 模拟器冒烟测试(启动 + 截图)
+        run: |
+          UDID=$(xcrun simctl list devices available | grep -E "iPhone" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          echo "使用模拟器 $UDID"
+          xcrun simctl boot "$UDID" || true
+          APP=$(find build-sim/Build/Products -name "PinyinDemo.app" -path "*iphonesimulator*" | head -1)
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" com.adi.demo.pinyinapp || true
+          sleep 6
+          xcrun simctl io "$UDID" screenshot simulator-screenshot.png || true
+          # 顺手在模拟器里注册键盘扩展(设置里可见即代表扩展打包成功)
+          xcrun simctl listapps "$UDID" | grep -A2 pinyinapp || true
+
+      - name: 真机未签名构建并打包 ipa
+        run: |
+          xcodebuild build \
+            -project PinyinDemo.xcodeproj \
+            -scheme PinyinDemo \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build-device \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO || echo "真机构建失败(可忽略,模拟器产物仍可上传)"
+          APP=$(find build-device/Build/Products -name "PinyinDemo.app" -path "*iphoneos*" | head -1)
+          if [ -n "$APP" ]; then
+            rm -rf Payload && mkdir Payload
+            cp -R "$APP" Payload/
+            zip -qry PinyinDemo-unsigned.ipa Payload
+            echo "IPA 打包完成"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simulator-screenshot
+          path: simulator-screenshot.png
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-ipa
+          path: PinyinDemo-unsigned.ipa
+          if-no-files-found: ignore

@@ -1,0 +1,62 @@
+# XcodeGen 工程定义:宿主 App + 键盘扩展
+# 使用:安装 XcodeGen 后执行 `xcodegen generate` 生成 PinyinDemo.xcodeproj
+name: PinyinDemo
+options:
+  bundleIdPrefix: com.adi.demo
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"     # 仅 iPhone
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  PinyinDemo:
+    type: application
+    platform: iOS
+    sources:
+      - PinyinDemo/App
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.adi.demo.pinyinapp
+    info:
+      path: PinyinDemo/App/Info.plist
+      properties:
+        CFBundleDisplayName: 输入法Demo
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    dependencies:
+      - target: PinyinKeyboard      # 键盘扩展自动嵌入 PlugIns
+
+  PinyinKeyboard:
+    type: app-extension
+    platform: iOS
+    sources:
+      - PinyinDemo/Keyboard
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.adi.demo.pinyinapp.keyboard   # 必须是宿主 App bundle id 的子前缀
+    info:
+      path: PinyinDemo/Keyboard/Info.plist
+      properties:
+        CFBundleDisplayName: 阿帝拼音
+        RequestsOpenAccess: true            # 允许「完全访问」(语音/联网需要;基础拼音不需要)
+        PrimaryLanguage: zh-Hans
+        NSMicrophoneUsageDescription: "语音输入(听写)需要使用麦克风,音频仅用于本机语音识别。"
+        NSSpeechRecognitionUsageDescription: "语音输入使用系统设备端语音识别,内容不会上传。"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+
+schemes:
+  PinyinDemo:
+    build:
+      targets:
+        PinyinDemo: all
+        PinyinKeyboard: all
+    run:
+      config: Debug
