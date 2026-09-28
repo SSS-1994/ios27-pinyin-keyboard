@@ -25,7 +25,7 @@ struct ContentView: View {
                     Label("全拼:字母组合 → 点候选或空格上屏", systemImage: "textformat")
                     Label("九宫格:数字键 → 自动切分拼音出候选", systemImage: "circle.grid.3x3")
                     Label("换行键:组合中原样上屏拼音", systemImage: "arrow.turn.down.left")
-                    Label("语音键:预留位,方案见调研报告 §6.2", systemImage: "mic")
+                    Label("语音键:设备端听写,开启「完全访问」后可用", systemImage: "mic")
                 }
             }
             .navigationTitle("输入法 Demo")
