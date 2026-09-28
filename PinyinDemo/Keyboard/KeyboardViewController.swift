@@ -21,7 +21,8 @@ final class KeyboardViewController: UIInputViewController {
     private let modeButton = UIButton(type: .system)
     private let spaceButton = UIButton(type: .system)
     private let micButton = UIButton(type: .system)
-    private let voice = VoiceInputController()
+    /// 延迟创建:键盘扩展启动阶段不初始化任何语音框架(闪退加固)
+    private lazy var voice = VoiceInputController()
 
     // MARK: - 生命周期
 
@@ -37,10 +38,6 @@ final class KeyboardViewController: UIInputViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        voice.cancel()
-    }
-
-    deinit {
         voice.cancel()
     }
 

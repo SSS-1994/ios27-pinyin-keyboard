@@ -104,6 +104,12 @@ python scripts/build_lexicon.py
 - **扩展没出现在键盘列表**:确认扩展已随 App 嵌入(PlugIns),bundle id 为宿主 App 的子前缀(工程已配置好)。
 - **修改代码后键盘没更新**:杀掉宿主 App 重新聚焦输入框,或重启模拟器。
 
+## 版本号管理
+
+- 版本号统一定义在 [project.yml](project.yml) 的 `MARKETING_VERSION`(如 `1.1.0`)与 `CURRENT_PROJECT_VERSION`(构建号),App 与键盘扩展共用;
+- 发新版改这两处再提交,CI 自动打包出 **带版本号的 ipa**:`PinyinKeyboard-v1.1.0.2-unsigned.ipa`;
+- 构建产物与版本可在 Actions 运行页的「校验键盘扩展 Info.plist」步骤日志中核对。
+
 ## 下一步(v1.0 方向)
 
 1. 用户词与自造词:App Group 存储长句记忆、调频;

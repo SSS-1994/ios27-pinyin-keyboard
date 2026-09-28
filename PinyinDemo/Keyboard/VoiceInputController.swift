@@ -4,6 +4,8 @@ import Speech
 /// 语音听写:系统 SFSpeechRecognizer,优先完全设备端识别(zh-CN,不出设备、零费用)。
 /// 前提:用户已给键盘开启「完全访问」(Full Access),并允许麦克风与语音识别权限。
 /// 用法:onPartial 刷新候选栏,onFinal 直接上屏;start() 开始 / finish() 结束并上屏 / cancel() 放弃。
+/// 注意:所有重量级资源(AVAudioEngine/SFSpeechRecognizer)全部延迟创建,
+/// 保证键盘扩展进程启动阶段不触碰语音框架(闪退加固)。
 final class VoiceInputController: NSObject {
 
     var onPartial: ((String) -> Void)?
@@ -11,16 +13,27 @@ final class VoiceInputController: NSObject {
     var onError: ((String) -> Void)?
     var onListeningChange: ((Bool) -> Void)?
 
-    private let audioEngine = AVAudioEngine()
+    private lazy var audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
-    private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN"))
+    private lazy var recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN"))
 
-    var isListening: Bool { audioEngine.isRunning }
+    private(set) var listening = false
+    var isListening: Bool { listening }
+
+    deinit {
+        // 只有真正开启过会话才需要清理(避免强制创建 lazy 资源)
+        if request != nil || task != nil {
+            teardownAudio()
+            request = nil
+            task = nil
+        }
+    }
 
     // MARK: - 对外控制
 
     func start() {
+        guard !listening else { return }
         let speechStatus = SFSpeechRecognizer.authorizationStatus()
         let micGranted = AVAudioSession.sharedInstance().recordPermission == .granted
         if speechStatus == .authorized && micGranted {
@@ -38,17 +51,19 @@ final class VoiceInputController: NSObject {
 
     /// 结束录音,等待最终识别结果上屏
     func finish() {
-        guard isListening else { return }
+        guard listening else { return }
         request?.endAudio()
         teardownAudio()
-        onListeningChange?(false)
+        setListening(false)
     }
 
     /// 放弃当前听写
     func cancel() {
         task?.cancel()
-        teardownAudio()
-        cleanupSession()
+        if request != nil || task != nil { teardownAudio() }
+        request = nil
+        task = nil
+        setListening(false)
     }
 
     // MARK: - 内部实现
@@ -98,21 +113,26 @@ final class VoiceInputController: NSObject {
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                     if result.isFinal {
                         if !text.isEmpty { self.onFinal?(text) }
-                        self.cleanupSession()
+                        self.cancel()
                     } else {
                         self.onPartial?(text)
                     }
                 }
                 if error != nil {
                     self.onError?("识别中断,请重试")
-                    self.cleanupSession()
+                    self.cancel()
                 }
             }
-            onListeningChange?(true)
+            setListening(true)
         } catch {
             onError?("无法启动麦克风:\(error.localizedDescription)")
-            cleanupSession()
+            cancel()
         }
+    }
+
+    private func setListening(_ value: Bool) {
+        listening = value
+        onListeningChange?(value)
     }
 
     /// 停止采集音频(识别任务继续,直到 isFinal 回调)
@@ -120,12 +140,5 @@ final class VoiceInputController: NSObject {
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-    }
-
-    /// 释放任务并复位状态
-    private func cleanupSession() {
-        request = nil
-        task = nil
-        onListeningChange?(false)
     }
 }

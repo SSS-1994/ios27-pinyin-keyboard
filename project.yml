@@ -1,4 +1,4 @@
-# XcodeGen 工程定义:宿主 App + 键盘扩展
+# XcodeGen 工程定义:宿主 App + 键盘扩展 + 冒烟测试
 # 使用:安装 XcodeGen 后执行 `xcodegen generate` 生成 PinyinDemo.xcodeproj
 name: PinyinDemo
 options:
@@ -12,6 +12,8 @@ settings:
     SWIFT_VERSION: "5.0"
     TARGETED_DEVICE_FAMILY: "1"     # 仅 iPhone
     CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "1.1.0"      # 版本号(发布时改这里)
+    CURRENT_PROJECT_VERSION: "2"    # 构建号
 
 targets:
   PinyinDemo:
@@ -22,10 +24,13 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.adi.demo.pinyinapp
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: PinyinDemo/App/Info.plist
       properties:
         CFBundleDisplayName: 输入法Demo
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -44,6 +49,8 @@ targets:
       path: PinyinDemo/Keyboard/Info.plist
       properties:
         CFBundleDisplayName: 阿帝拼音
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         RequestsOpenAccess: true            # 允许「完全访问」(语音/联网需要;基础拼音不需要)
         PrimaryLanguage: zh-Hans
         NSMicrophoneUsageDescription: "语音输入(听写)需要使用麦克风,音频仅用于本机语音识别。"
@@ -51,6 +58,19 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.keyboard-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+
+  PinyinDemoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - PinyinDemo/Tests
+      - PinyinDemo/Keyboard/KeyboardViewController.swift
+      - PinyinDemo/Keyboard/PinyinEngine.swift
+      - PinyinDemo/Keyboard/Lexicon.swift
+      - PinyinDemo/Keyboard/VoiceInputController.swift
+      - PinyinDemo/Keyboard/Resources
+    dependencies:
+      - target: PinyinDemo          # 以 App 为宿主进程跑测试
 
 schemes:
   PinyinDemo:
@@ -60,3 +80,7 @@ schemes:
         PinyinKeyboard: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - PinyinDemoTests

@@ -1,7 +1,9 @@
 # 免费云端构建:GitHub 公共仓库的 macOS runner 完全免费。
-# 产出两个 artifact:
-#   1. simulator-screenshot  — 模拟器安装启动冒烟截图(功能验证)
-#   2. unsigned-ipa          — 未签名 ipa,下载后自行签名安装(Sideloadly/AltStore/爱思/Xcode)
+# 流程:xcodegen 生成工程 → 模拟器跑冒烟测试(viewDidLoad 启动崩溃防线)
+#       → 模拟器安装启动截图 → 校验键盘扩展 Info.plist → 打包带版本号的未签名 ipa
+# 产物 artifact:
+#   simulator-screenshot  — 模拟器启动验证截图
+#   unsigned-ipa-v<版本>  — 未签名 ipa,下载后自行签名安装
 name: iOS Build
 
 on:
@@ -25,37 +27,50 @@ jobs:
           echo "使用 $XCODE_APP"
           sudo xcode-select -s "$XCODE_APP"
           xcodebuild -version
-          xcodebuild -showsdks
 
       - name: 安装 XcodeGen 并生成工程
         run: |
           brew install xcodegen
           xcodegen generate
 
-      - name: 模拟器构建
+      - name: 模拟器冒烟测试(编译全量代码 + 真实加载键盘控制器 + 引擎/词库回归)
         run: |
-          set -o pipefail
+          UDID=$(xcrun simctl list devices available | grep -E "iPhone" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          echo "测试模拟器: $UDID"
+          xcodebuild test \
+            -project PinyinDemo.xcodeproj \
+            -scheme PinyinDemo \
+            -destination "id=$UDID" \
+            CODE_SIGNING_ALLOWED=NO | tail -40
+
+      - name: 模拟器安装启动截图
+        run: |
+          UDID=$(xcrun simctl list devices available | grep -E "iPhone" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
           xcodebuild build \
             -project PinyinDemo.xcodeproj \
             -scheme PinyinDemo \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build-sim \
             CODE_SIGNING_ALLOWED=NO
-
-      - name: 模拟器冒烟测试(启动 + 截图)
-        run: |
-          UDID=$(xcrun simctl list devices available | grep -E "iPhone" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
-          echo "使用模拟器 $UDID"
           xcrun simctl boot "$UDID" || true
           APP=$(find build-sim/Build/Products -name "PinyinDemo.app" -path "*iphonesimulator*" | head -1)
           xcrun simctl install "$UDID" "$APP"
           xcrun simctl launch "$UDID" com.adi.demo.pinyinapp || true
           sleep 6
           xcrun simctl io "$UDID" screenshot simulator-screenshot.png || true
-          # 顺手在模拟器里注册键盘扩展(设置里可见即代表扩展打包成功)
-          xcrun simctl listapps "$UDID" | grep -A2 pinyinapp || true
 
-      - name: 真机未签名构建并打包 ipa
+      - name: 校验键盘扩展 Info.plist(闪退排查:确认主类声明正确展开)
+        run: |
+          PLIST=$(find build-sim/Build/Products -path "*PinyinKeyboard.appex/Info.plist" | head -1)
+          echo "=== 扩展 Info.plist NSExtension ==="
+          /usr/libexec/PlistBuddy -c "Print :NSExtension" "$PLIST"
+          echo "=== 版本 ==="
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST"
+          echo "=== 扩展嵌入结构 ==="
+          find build-sim/Build/Products -name "*.appex" -o -name "PinyinDemo.app" -maxdepth 6 | head -5
+
+      - name: 真机未签名构建并打包 ipa(文件名带版本号)
         run: |
           xcodebuild build \
             -project PinyinDemo.xcodeproj \
@@ -65,10 +80,14 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO || echo "真机构建失败(可忽略,模拟器产物仍可上传)"
           APP=$(find build-device/Build/Products -name "PinyinDemo.app" -path "*iphoneos*" | head -1)
           if [ -n "$APP" ]; then
+            VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
+            BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist")
+            IPA_NAME="PinyinKeyboard-v${VER}.${BUILD}-unsigned.ipa"
+            echo "IPA_NAME=$IPA_NAME" >> "$GITHUB_ENV"
             rm -rf Payload && mkdir Payload
             cp -R "$APP" Payload/
-            zip -qry PinyinDemo-unsigned.ipa Payload
-            echo "IPA 打包完成"
+            zip -qry "$IPA_NAME" Payload
+            echo "打包完成: $IPA_NAME"
           fi
 
       - uses: actions/upload-artifact@v4
@@ -79,6 +98,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: unsigned-ipa
-          path: PinyinDemo-unsigned.ipa
+          name: ${{ env.IPA_NAME || 'unsigned-ipa' }}
+          path: ${{ env.IPA_NAME || 'PinyinKeyboard-unsigned.ipa' }}
           if-no-files-found: ignore
