@@ -30,7 +30,8 @@ final class KeyboardViewController: UIInputViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         inputView?.allowsSelfSizing = true
-        view.heightAnchor.constraint(equalToConstant: 264).isActive = true
+        // 272pt:候选栏 44(触控达标)+ 3 行主键 + 功能行;iPhone 17 全系可用
+        view.heightAnchor.constraint(equalToConstant: 272).isActive = true
         setupUI()
         buildKeyboard()
         refreshCandidates()
@@ -54,10 +55,13 @@ final class KeyboardViewController: UIInputViewController {
     private func setupUI() {
         view.backgroundColor = .secondarySystemBackground
 
-        // 候选栏:拼音/数字串 + 横滚候选 + 语音键
+        // 候选栏:拼音/数字串(点击可原样上屏)+ 横滚候选 + 语音键
         candidateLabel.font = .systemFont(ofSize: 15, weight: .semibold)
         candidateLabel.textColor = .secondaryLabel
         candidateLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        candidateLabel.isUserInteractionEnabled = true
+        candidateLabel.addGestureRecognizer(
+            UITapGestureRecognizer(target: self, action: #selector(tapCandidateLabel)))
 
         candidateStack.axis = .horizontal
         candidateStack.spacing = 2
@@ -77,12 +81,13 @@ final class KeyboardViewController: UIInputViewController {
         configureAsKey(micButton, fontSize: 18)
         micButton.setTitle("🎤", for: .normal)
         micButton.addAction(UIAction { [weak self] _ in self?.toggleVoice() }, for: .touchUpInside)
-        micButton.widthAnchor.constraint(equalToConstant: 40).isActive = true
+        micButton.widthAnchor.constraint(equalToConstant: 48).isActive = true
 
         let candidateBar = UIStackView(arrangedSubviews: [candidateLabel, candidateScroll, micButton])
         candidateBar.axis = .horizontal
         candidateBar.spacing = 6
-        candidateBar.heightAnchor.constraint(equalToConstant: 36).isActive = true
+        // 44pt:满足 HIG 最小触控高度
+        candidateBar.heightAnchor.constraint(equalToConstant: 44).isActive = true
 
         // 主键区(3 行,随模式重建)
         keyboardStack.axis = .vertical
@@ -102,11 +107,20 @@ final class KeyboardViewController: UIInputViewController {
         spaceButton.addAction(UIAction { [weak self] _ in self?.tapSpace() }, for: .touchUpInside)
         let returnButton = key("换行") { [weak self] in self?.tapReturn() }
         let deleteButton = key("⌫") { [weak self] in self?.tapDelete() }
+        // 长按连删:按住 0.4s 后以 0.08s 间隔连删;单击仍只删一个
+        deleteButton.addTarget(self, action: #selector(startRepeatDelete), for: .touchDown)
+        deleteButton.addTarget(self, action: #selector(stopRepeatDelete),
+                               for: [.touchUpInside, .touchUpOutside, .touchCancel])
 
         let functionRow = UIStackView(arrangedSubviews: [globeButton, modeButton, spaceButton, returnButton, deleteButton])
         functionRow.axis = .horizontal
-        functionRow.distribution = .fillEqually
+        functionRow.distribution = .fill
         functionRow.spacing = 6
+        // 次要键固定宽,空格吃掉剩余空间(最高频键给最大触控面积)
+        globeButton.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        modeButton.widthAnchor.constraint(equalToConstant: 52).isActive = true
+        returnButton.widthAnchor.constraint(equalToConstant: 56).isActive = true
+        deleteButton.widthAnchor.constraint(equalToConstant: 44).isActive = true
 
         // 竖向主栈
         let main = UIStackView(arrangedSubviews: [candidateBar, keyboardStack, functionRow])
@@ -188,6 +202,10 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func tapDelete() {
+        if suppressNextDelete {
+            suppressNextDelete = false      // 长按连删结束的那次抬起,不再多删一个
+            return
+        }
         stopVoiceIfNeeded()
         if composing.isEmpty {
             textDocumentProxy.deleteBackward()
@@ -195,6 +213,46 @@ final class KeyboardViewController: UIInputViewController {
             composing.removeLast()
             refreshCandidates()
         }
+    }
+
+    // MARK: - 长按连删
+
+    private var deleteTimer: Timer?
+    private var suppressNextDelete = false
+
+    @objc private func startRepeatDelete() {
+        deleteTimer?.invalidate()
+        deleteTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.repeatDeleteTick()
+            self.suppressNextDelete = true   // 松手时的 touchUpInside 不再多删
+            self.deleteTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
+                self?.repeatDeleteTick()
+            }
+        }
+    }
+
+    private func repeatDeleteTick() {
+        if voice.isListening { voice.cancel() }
+        if composing.isEmpty {
+            textDocumentProxy.deleteBackward()
+        } else {
+            composing.removeLast()
+            refreshCandidates()
+        }
+    }
+
+    @objc private func stopRepeatDelete() {
+        deleteTimer?.invalidate()
+        deleteTimer = nil
+    }
+
+    // MARK: - 点击拼音串原样上屏
+
+    @objc private func tapCandidateLabel() {
+        guard !composing.isEmpty else { return }
+        stopVoiceIfNeeded()
+        commit(composing)
     }
 
     private func cycleMode() {
@@ -230,7 +288,7 @@ final class KeyboardViewController: UIInputViewController {
         let nextName: String
         switch mode {
         case .qwerty: nextName = "九宫"
-        case .t9: nextName = "ABC"
+        case .t9: nextName = "123"      // 点击后进入数字模式(与 cycleMode 顺序一致)
         case .numbers: nextName = "全拼"
         }
         modeButton.setTitle(nextName, for: .normal)

@@ -96,6 +96,11 @@ final class VoiceInputController: NSObject {
     }
 
     private func beginSession() {
+        // 隐私优先:仅设备端识别。设备无 zh-CN 离线模型时明确报错,而不是让用户干等
+        guard let recognizer, recognizer.supportsOnDeviceRecognition == true else {
+            onError?("当前设备不支持中文离线语音识别,已取消。")
+            return
+        }
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.record, mode: .measurement, options: .duckOthers)
@@ -103,9 +108,7 @@ final class VoiceInputController: NSObject {
 
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.shouldReportPartialResults = true
-            if recognizer?.supportsOnDeviceRecognition == true {
-                request.requiresOnDeviceRecognition = true   // 隐私优先:强制离线识别
-            }
+            request.requiresOnDeviceRecognition = true   // 强制完全离线,音频不出设备
             self.request = request
 
             let inputNode = audioEngine.inputNode
@@ -118,7 +121,7 @@ final class VoiceInputController: NSObject {
             try audioEngine.start()
 
             // 识别结果回调在后台线程:一律 emit 回主线程后再碰 UI / textDocumentProxy
-            task = recognizer?.recognitionTask(with: request) { [weak self] result, error in
+            task = recognizer.recognitionTask(with: request) { [weak self] result, error in
                 guard let self else { return }
                 if let result {
                     let text = result.bestTranscription.formattedString
