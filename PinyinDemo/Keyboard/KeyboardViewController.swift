@@ -35,8 +35,9 @@ final class KeyboardViewController: UIInputViewController {
         setupUI()
         buildKeyboard()
         refreshCandidates()
-        // 后台预热词库:避免首次按键时同步解析 JSON 的卡顿(静态 let 并发安全)
-        DispatchQueue.global(qos: .utility).async { _ = Lexicon.table }
+        // 词库预热延迟 1.5s:启动初期对内存最敏感(真机 jetsam ~69MB),
+        // 先让键盘完全稳定显示,再在后台加载词库(瘦身后峰值约 5MB)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.5) { _ = Lexicon.table }
     }
 
     override func viewWillDisappear(_ animated: Bool) {

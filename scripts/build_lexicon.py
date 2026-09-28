@@ -23,7 +23,10 @@ OUT_FILE = os.path.join(OUT_DIR, "Lexicon.json")
 SWIFT_ENGINE = os.path.join(ROOT, "PinyinDemo", "Keyboard", "PinyinEngine.swift")
 
 MAX_WORDS_PER_KEY = 30      # 每个拼音串最多保留候选数
-MAX_TOTAL_WORDS = 60000     # 全局词库上限(控内存;iPhone 11/12 老机型可调小)
+MAX_TOTAL_WORDS = 20000     # 全局词库上限。
+# 关键:真机键盘扩展 jetsam 上限约 69MB(不分机型,模拟器不受限),
+# 6 万词条解析后内存峰值会踩线导致"切到键盘即闪退";
+# 2 万高频词解析后约 5-6MB,真机安全。老机型还可进一步调小。
 CJK = re.compile(r"^[\u4e00-\u9fff]+$")
 
 
