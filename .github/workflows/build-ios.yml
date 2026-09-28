@@ -35,13 +35,20 @@ jobs:
 
       - name: 模拟器冒烟测试(编译全量代码 + 真实加载键盘控制器 + 引擎/词库回归)
         run: |
+          set -euo pipefail
           UDID=$(xcrun simctl list devices available | grep -E "iPhone" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
           echo "测试模拟器: $UDID"
-          xcodebuild test \
-            -project PinyinDemo.xcodeproj \
-            -scheme PinyinDemo \
-            -destination "id=$UDID" \
-            CODE_SIGNING_ALLOWED=NO | tail -40
+          # 不能用管道 tail(会吞掉退出码,测试失败 CI 也会绿);用日志文件方式输出
+          if ! xcodebuild test \
+              -project PinyinDemo.xcodeproj \
+              -scheme PinyinDemo \
+              -destination "id=$UDID" \
+              CODE_SIGNING_ALLOWED=NO > test.log 2>&1; then
+            tail -60 test.log
+            echo "::error::冒烟测试失败,详见日志尾部"
+            exit 1
+          fi
+          tail -20 test.log
 
       - name: 模拟器安装启动截图
         run: |

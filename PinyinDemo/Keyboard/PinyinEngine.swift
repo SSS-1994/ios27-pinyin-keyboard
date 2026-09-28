@@ -268,12 +268,15 @@ enum PinyinEngine {
 
     // MARK: - 切分
 
-    /// 全拼切分:返回所有把字符串切成合法音节的方式(限 6 种防组合爆炸)
-    private static func splits(of s: String, limit: Int = 6) -> [[String]] {
+    /// 全拼切分:返回所有把字符串切成合法音节的方式。
+    /// limit 限制方案数、visitBudget 限制递归节点数(双重保险,防极端输入卡死按键)
+    private static func splits(of s: String, limit: Int = 6, visitBudget: Int = 2000) -> [[String]] {
         let chars = Array(s)
         var results: [[String]] = []
+        var visits = 0
         func rec(_ idx: Int, _ acc: [String]) {
-            if results.count >= limit { return }
+            if results.count >= limit || visits > visitBudget { return }
+            visits += 1
             if idx == chars.count { results.append(acc); return }
             for len in 1...6 where idx + len <= chars.count {
                 let piece = String(chars[idx..<(idx + len)])
@@ -284,12 +287,14 @@ enum PinyinEngine {
         return results
     }
 
-    /// T9 切分:数字串 → 所有能按数字对上的音节序列(限 6 种)
-    private static func t9Splits(of digitsInput: String, limit: Int = 6) -> [[String]] {
+    /// T9 切分:数字串 → 所有能按数字对上的音节序列(含分支预算,防止乱按时深挖卡死)
+    private static func t9Splits(of digitsInput: String, limit: Int = 6, visitBudget: Int = 2000) -> [[String]] {
         let ds = Array(digitsInput)
         var results: [[String]] = []
+        var visits = 0
         func rec(_ idx: Int, _ acc: [String]) {
-            if results.count >= limit { return }
+            if results.count >= limit || visits > visitBudget { return }
+            visits += 1
             if idx == ds.count { results.append(acc); return }
             for len in 1...6 where idx + len <= ds.count {
                 let piece = String(ds[idx..<(idx + len)])

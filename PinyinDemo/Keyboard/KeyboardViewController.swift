@@ -161,7 +161,10 @@ final class KeyboardViewController: UIInputViewController {
         case .numbers:
             textDocumentProxy.insertText(payload)
         case .qwerty, .t9:
-            composing.append(payload)
+            // 长度上限防呆:拼音串最长 6 音节,24 字符足够;杜绝极端长度拖慢切分
+            if composing.count < 24 {
+                composing.append(payload)
+            }
             refreshCandidates()
         }
     }

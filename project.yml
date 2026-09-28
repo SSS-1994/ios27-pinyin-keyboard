@@ -13,7 +13,7 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"     # 仅 iPhone
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "1.1.0"      # 版本号(发布时改这里)
-    CURRENT_PROJECT_VERSION: "3"    # 构建号
+    CURRENT_PROJECT_VERSION: "4"    # 构建号
 
 targets:
   PinyinDemo:
@@ -52,12 +52,12 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         RequestsOpenAccess: true            # 允许「完全访问」(语音/联网需要;基础拼音不需要)
-        PrimaryLanguage: zh-Hans
         NSMicrophoneUsageDescription: "语音输入(听写)需要使用麦克风,音频仅用于本机语音识别。"
         NSSpeechRecognitionUsageDescription: "语音输入使用系统设备端语音识别,内容不会上传。"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.keyboard-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          PrimaryLanguage: zh-Hans            # 声明为中文键盘(须嵌在 NSExtension 字典内)
 
   PinyinDemoTests:
     type: bundle.unit-test

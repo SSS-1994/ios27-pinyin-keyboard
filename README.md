@@ -64,22 +64,27 @@ open PinyinDemo.xcodeproj
 ## 工程结构
 
 ```
-project.yml                      # XcodeGen 定义(App + 键盘扩展 target)
+project.yml                      # XcodeGen 定义(App + 键盘扩展 + 测试)
 .github/workflows/build-ios.yml  # 免费云端构建
 docs/调研报告-iOS27输入法.md
 scripts/
 ├── build_lexicon.py             # 词库转换:rime-ice .dict.yaml → Lexicon.json
-└── lint_swift.py                # 无编译器时的静态粗查(括号/符号引用)
+├── download_artifacts.py         # 增量下载最新 ipa 到 download/(升级后手动跑一次)
+├── make_icon.py                  # 重新生成 App 图标
+└── lint_swift.py                 # 无编译器时的静态粗查(括号/符号引用)
 PinyinDemo/
 ├── App/                         # 宿主 App(SwiftUI)
 │   ├── PinyinDemoApp.swift
-│   └── ContentView.swift
-└── Keyboard/                    # 键盘扩展(app-extension)
-    ├── KeyboardViewController.swift   # UI + 按键逻辑(全拼/九宫格/数字 + 语音集成)
-    ├── PinyinEngine.swift             # 全拼/T9 切分引擎 + 内置兜底小词库
-    ├── Lexicon.swift                  # 大词库懒加载(失败自动回退内置小表)
-    ├── VoiceInputController.swift     # 语音听写(设备端识别、流式上屏)
-    └── Resources/Lexicon.json         # 6 万词条词库(1.45MB,构建词库见下)
+│   ├── ContentView.swift
+│   └── Assets.xcassets/         # 扁平色块风格图标
+├── Keyboard/                    # 键盘扩展(app-extension)
+│   ├── KeyboardViewController.swift   # UI + 按键逻辑(全拼/九宫格/数字 + 语音集成)
+│   ├── PinyinEngine.swift             # 全拼/T9 切分引擎 + 内置兜底小词库
+│   ├── Lexicon.swift                  # 大词库懒加载
+│   ├── VoiceInputController.swift     # 语音听写(设备端识别、流式上屏)
+│   └── Resources/Lexicon.json         # 6 万词条词库(1.45MB,构建词库见下)
+└── Tests/                       # CI 冒烟测试(真实加载键盘控制器,回归启动/引擎)
+    └── SmokeTests.swift
 ```
 
 ### 重新生成词库(可选)
