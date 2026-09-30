@@ -1,4 +1,4 @@
-# 免费云端构建:GitHub 公共仓库的 macOS runner 完全免费。
+# 免费云端构建:GitHub 公共仓库的 macOS runner 完全免费
 # 流程:xcodegen 生成工程 → 模拟器跑冒烟测试(viewDidLoad 启动崩溃防线)
 #       → 模拟器安装启动截图 → 校验键盘扩展 Info.plist → 打包带版本号的未签名 ipa
 # 产物 artifact:
